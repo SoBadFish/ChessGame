@@ -587,7 +587,6 @@ public class ChessPanEntity extends Entity implements CustomEntity {
     private void doAIMove() {
         if(!vsAI || isEnd) return;
 
-        // 根据难度选择策略
         switch(aiDifficulty) {
             case EASY:
                 doRandomMove();
@@ -601,6 +600,125 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         }
     }
 
+    private void doRandomMove() {
+        LinkedList<int[]> validMoves = getAllValidMoves();
+        if(validMoves.isEmpty()) return;
+
+        LinkedList<int[]> goodMoves = new LinkedList<>();
+        LinkedList<int[]> safeMoves = new LinkedList<>();
+
+        for (int[] move : validMoves) {
+            ChessEntity target = chessEntities.get(move[1]);
+            if (target != null) {
+                goodMoves.add(move);
+            } else {
+                simulateMove(move[0], move[1]);
+                boolean danger = isUnderThreat(move[1]);
+                undoMove(move[0], move[1], target);
+                if (!danger) {
+                    safeMoves.add(move);
+                }
+            }
+        }
+
+        LinkedList<int[]> candidates = !goodMoves.isEmpty() ? goodMoves : (!safeMoves.isEmpty() ? safeMoves : validMoves);
+        int[] selected = candidates.get(new java.util.Random().nextInt(candidates.size()));
+        choseChessIndex(selected[0], null, !aiIsRed);
+        chessToIndex(selected[1]);
+    }
+
+    private void doMediumMove() {
+        LinkedList<int[]> validMoves = getAllValidMoves();
+        if(validMoves.isEmpty()) return;
+
+        int bestScore = Integer.MIN_VALUE;
+        LinkedList<int[]> bestMoves = new LinkedList<>();
+
+        for (int[] move : validMoves) {
+            ChessEntity captured = chessEntities.get(move[1]);
+            simulateMove(move[0], move[1]);
+
+            int score = evaluateBoard(aiIsRed);
+            if (score > bestScore) {
+                bestScore = score;
+                bestMoves.clear();
+                bestMoves.add(move);
+            } else if (score == bestScore) {
+                bestMoves.add(move);
+            }
+
+            undoMove(move[0], move[1], captured);
+        }
+
+        int[] selected = bestMoves.get(new java.util.Random().nextInt(bestMoves.size()));
+        choseChessIndex(selected[0], null, !aiIsRed);
+        chessToIndex(selected[1]);
+    }
+
+    private void doHardMove() {
+        LinkedList<int[]> validMoves = getAllValidMoves();
+        if(validMoves.isEmpty()) return;
+
+        int bestScore = Integer.MIN_VALUE;
+        int[] bestMove = null;
+
+        for (int[] move : validMoves) {
+            ChessEntity captured = chessEntities.get(move[1]);
+            simulateMove(move[0], move[1]);
+
+            int score = minimax(3, false, Integer.MIN_VALUE, Integer.MAX_VALUE);
+
+            undoMove(move[0], move[1], captured);
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestMove = move;
+            }
+        }
+
+        if (bestMove != null) {
+            choseChessIndex(bestMove[0], null, !aiIsRed);
+            chessToIndex(bestMove[1]);
+        } else {
+            doMediumMove(); // fallback
+        }
+    }
+
+    private int minimax(int depth, boolean maximizing, int alpha, int beta) {
+        if (depth == 0 || isEnd) {
+            return evaluateBoard(aiIsRed);
+        }
+
+        LinkedList<int[]> moves = getAllValidMoves();
+        if (moves.isEmpty()) return evaluateBoard(aiIsRed);
+
+        if (maximizing) {
+            int maxEval = Integer.MIN_VALUE;
+            for (int[] move : moves) {
+                ChessEntity captured = chessEntities.get(move[1]);
+                simulateMove(move[0], move[1]);
+                int eval = minimax(depth - 1, false, alpha, beta);
+                undoMove(move[0], move[1], captured);
+                maxEval = Math.max(maxEval, eval);
+                alpha = Math.max(alpha, eval);
+                if (beta <= alpha) break;
+            }
+            return maxEval;
+        } else {
+            int minEval = Integer.MAX_VALUE;
+            for (int[] move : moves) {
+                ChessEntity captured = chessEntities.get(move[1]);
+                simulateMove(move[0], move[1]);
+                int eval = minimax(depth - 1, true, alpha, beta);
+                undoMove(move[0], move[1], captured);
+                minEval = Math.min(minEval, eval);
+                beta = Math.min(beta, eval);
+                if (beta <= alpha) break;
+            }
+            return minEval;
+        }
+    }
+
     /**
      * 评估当前棋盘状态对AI方的价值
      * @param forRed 评估红方的优势
@@ -611,7 +729,7 @@ public class ChessPanEntity extends Entity implements CustomEntity {
 
         // 棋子基础价值
         int[] pieceValues = {1000, 10, 50, 100, 50, 20, 20,  // 黑方棋子价值
-                            1000, 10, 50, 100, 50, 20, 20}; // 红方棋子价值
+                1000, 10, 50, 100, 50, 20, 20}; // 红方棋子价值
 
         // 统计棋子价值
         for(ChessEntity entity : chessEntities.values()) {
@@ -628,31 +746,61 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         return score;
     }
 
-    /**
-     * 获取当前AI方的所有合法走法
-     * @return 包含所有合法走法的列表，每个元素是[源位置, 目标位置]的数组
-     */
+    private void simulateMove(int fromIndex, int toIndex) {
+        ChessEntity entity = chessEntities.get(fromIndex);
+        chessEntities.remove(fromIndex);
+        chessEntities.put(toIndex, entity);
+        entity.setPanIndex(toIndex);
+    }
+
+    private void undoMove(int fromIndex, int toIndex, ChessEntity originalTarget) {
+        ChessEntity entity = chessEntities.get(toIndex);
+        chessEntities.remove(toIndex);
+        chessEntities.put(fromIndex, entity);
+        entity.setPanIndex(fromIndex);
+        if (originalTarget != null) {
+            chessEntities.put(toIndex, originalTarget);
+        }
+    }
+
+    private boolean isUnderThreat(int index) {
+        ChessEntity target = chessEntities.get(index);
+        if (target == null) return false;
+        boolean targetIsRed = target.type >= 7;
+
+        for (Integer key : chessEntities.keySet()) {
+            ChessEntity attacker = chessEntities.get(key);
+            if (attacker != null && ((attacker.type < 7) != targetIsRed)) {
+                int row = key / 9;
+                int col = key % 9;
+                int tRow = index / 9;
+                int tCol = index % 9;
+                if (isValidMove(attacker.type, row, col, tRow, tCol)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private LinkedList<int[]> getAllValidMoves() {
         LinkedList<int[]> validMoves = new LinkedList<>();
 
-        // 获取所有AI方的棋子
         for(Integer sourceIndex : chessEntities.keySet()) {
             ChessEntity entity = chessEntities.get(sourceIndex);
             if(entity != null && ((aiIsRed && entity.type >= 7) || (!aiIsRed && entity.type < 7))) {
                 int sourceRow = sourceIndex / 9;
                 int sourceCol = sourceIndex % 9;
 
-                // 检查所有可能的走法
                 for(int targetIndex = 0; targetIndex < 90; targetIndex++) {
                     int targetRow = targetIndex / 9;
                     int targetCol = targetIndex % 9;
 
                     if(isValidMove(entity.type, sourceRow, sourceCol, targetRow, targetCol)) {
                         ChessEntity targetEntity = chessEntities.get(targetIndex);
-                        // 检查是否吃自己的棋子
                         if(targetEntity == null ||
-                           (aiIsRed && targetEntity.type < 7) ||
-                           (!aiIsRed && targetEntity.type >= 7)) {
+                                (aiIsRed && targetEntity.type < 7) ||
+                                (!aiIsRed && targetEntity.type >= 7)) {
                             validMoves.add(new int[]{sourceIndex, targetIndex});
                         }
                     }
@@ -661,210 +809,6 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         }
 
         return validMoves;
-    }
-
-    /**
-     * 简单难度
-     */
-    private void doRandomMove() {
-        LinkedList<int[]> validMoves = getAllValidMoves();
-        if(validMoves.isEmpty()) return;
-
-        // 评估每个走法
-        LinkedList<int[]> goodMoves = new LinkedList<>();
-        LinkedList<int[]> neutralMoves = new LinkedList<>();
-
-        for(int[] move : validMoves) {
-
-            ChessEntity targetEntity = chessEntities.get(move[1]);
-            // 吃子走法优先
-            if(targetEntity != null) {
-                // 吃高价值棋子是最好走法
-                if((targetEntity.type == 0 || targetEntity.type == 7) ||  // 将/帅
-                   (targetEntity.type == 3 || targetEntity.type == 10)) { // 车
-                    goodMoves.add(move);
-                    continue;
-                }
-                goodMoves.add(move);
-            }
-            // 普通走法
-            else {
-                neutralMoves.add(move);
-            }
-        }
-
-        // 优先选择好走法，没有则选中性走法
-        LinkedList<int[]> candidates = !goodMoves.isEmpty() ? goodMoves : neutralMoves;
-        // 随机选择一个候选走法
-        int randomMove = new java.util.Random().nextInt(candidates.size());
-        int[] selectedMove = candidates.get(randomMove);
-        // 执行走棋
-        choseChessIndex(selectedMove[0], null, !aiIsRed);
-        chessToIndex(selectedMove[1]);
-
-    }
-
-    /**
-     * 中等难度：优先吃子并考虑简单评估
-     * 1. 优先吃价值高的棋子
-     * 2. 避免被吃
-     * 3. 随机选择最优的几个走法之一
-     */
-    private void doMediumMove() {
-        LinkedList<int[]> validMoves = getAllValidMoves();
-        if(validMoves.isEmpty()) return;
-
-        // 严格验证并评估每个走法
-        LinkedList<int[]> bestMoves = new LinkedList<>();
-        int bestScore = Integer.MIN_VALUE;
-
-        for(int[] move : validMoves) {
-            int sourceIndex = move[0];
-            int targetIndex = move[1];
-            ChessEntity sourceEntity = chessEntities.get(sourceIndex);
-            ChessEntity targetEntity = chessEntities.get(targetIndex);
-            int sourceRow = sourceIndex / 9;
-            int sourceCol = sourceIndex % 9;
-            int targetRow = targetIndex / 9;
-            int targetCol = targetIndex % 9;
-
-            // 严格验证走法
-            if(!isValidMove(sourceEntity.type, sourceRow, sourceCol, targetRow, targetCol)) {
-                continue;
-            }
-
-            // 检查是否吃自己的棋子
-            if(targetEntity != null &&
-              ((sourceEntity.type < 7 && targetEntity.type < 7) ||
-               (sourceEntity.type >= 7 && targetEntity.type >= 7))) {
-                continue;
-            }
-
-            // 计算走法得分
-            int score = 0;
-            if(targetEntity != null) {
-                // 吃子得分
-                score += targetEntity.type < 7 ?
-                    (targetEntity.type == 0 ? 1000 : targetEntity.type == 3 ? 100 : 50) :
-                    (targetEntity.type == 7 ? 1000 : targetEntity.type == 10 ? 100 : 50);
-            }
-
-            // 更新最佳走法
-            if(score > bestScore) {
-                bestScore = score;
-                bestMoves.clear();
-                bestMoves.add(move);
-            } else if(score == bestScore) {
-                bestMoves.add(move);
-            }
-        }
-
-        // 随机选择一个最佳走法
-        int randomMove = new java.util.Random().nextInt(bestMoves.size());
-        int[] selectedMove = bestMoves.get(randomMove);
-
-        // 执行走棋
-        choseChessIndex(selectedMove[0], null, !aiIsRed);
-        chessToIndex(selectedMove[1]);
-    }
-
-    /**
-     * 困难难度：使用简单极小化极大算法考虑2步策略
-     * 1. 评估所有可能的走法
-     * 2. 考虑对手的最佳回应
-     * 3. 选择最有利的走法
-     */
-    private void doHardMove() {
-        LinkedList<int[]> validMoves = getAllValidMoves();
-        if(validMoves.isEmpty()) return;
-
-        int[] bestMove = null;
-        int bestScore = Integer.MIN_VALUE;
-
-        // 严格验证并评估每个走法
-        for(int[] move : validMoves) {
-            ChessEntity sourceEntity = chessEntities.get(move[0]);
-            ChessEntity targetEntity = chessEntities.get(move[1]);
-            int sourceRow = move[0] / 9;
-            int sourceCol = move[0] % 9;
-            int targetRow = move[1] / 9;
-            int targetCol = move[1] % 9;
-
-            // 严格验证走法
-            if(!isValidMove(sourceEntity.type, sourceRow, sourceCol, targetRow, targetCol)) {
-                continue;
-            }
-
-            // 检查是否吃自己的棋子
-            if(targetEntity != null &&
-              ((sourceEntity.type < 7 && targetEntity.type < 7) ||
-               (sourceEntity.type >= 7 && targetEntity.type >= 7))) {
-                continue;
-            }
-
-            // 模拟走棋
-            targetEntity = chessEntities.get(move[1]);
-            chessEntities.remove(move[0]);
-            chessEntities.put(move[1], sourceEntity);
-            sourceEntity.setPanIndex(move[1]);
-            isRedRun = !isRedRun;
-
-            // 评估对手的最佳回应
-            int minOpponentScore = Integer.MAX_VALUE;
-            LinkedList<int[]> opponentMoves = getAllValidMoves();
-            for(int[] oppMove : opponentMoves) {
-                ChessEntity oppSource = chessEntities.get(oppMove[0]);
-                ChessEntity oppTarget = chessEntities.get(oppMove[1]);
-                chessEntities.remove(oppMove[0]);
-                chessEntities.put(oppMove[1], oppSource);
-                oppSource.setPanIndex(oppMove[1]);
-                isRedRun = !isRedRun;
-
-                // 评估局面
-                int score = evaluateBoard(aiIsRed);
-                if(score < minOpponentScore) {
-                    minOpponentScore = score;
-                }
-
-                // 撤销对手走棋
-                chessEntities.remove(oppMove[1]);
-                chessEntities.put(oppMove[0], oppSource);
-                oppSource.setPanIndex(oppMove[0]);
-                if(oppTarget != null) {
-                    chessEntities.put(oppMove[1], oppTarget);
-                }
-                isRedRun = !isRedRun;
-            }
-
-            // 如果没有对手走法，直接评估当前局面
-            if(opponentMoves.isEmpty()) {
-                minOpponentScore = evaluateBoard(aiIsRed);
-            }
-
-            // 选择对AI最有利的走法
-            if(minOpponentScore > bestScore) {
-                bestScore = minOpponentScore;
-                bestMove = move;
-            }
-
-            // 撤销模拟走棋
-            chessEntities.remove(move[1]);
-            chessEntities.put(move[0], sourceEntity);
-            sourceEntity.setPanIndex(move[0]);
-            if(targetEntity != null) {
-                chessEntities.put(move[1], targetEntity);
-            }
-            isRedRun = !isRedRun;
-        }
-
-        // 执行最佳走法
-        if(bestMove != null) {
-            choseChessIndex(bestMove[0], null, !aiIsRed);
-            chessToIndex(bestMove[1]);
-        } else {
-            // 没有找到最佳走法，使用中等难度策略
-            doMediumMove();
-        }
     }
 
     @Override
