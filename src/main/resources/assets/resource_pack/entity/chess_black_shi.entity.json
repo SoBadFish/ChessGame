@@ -1,0 +1,21 @@
+{
+	"format_version": "1.10.0",
+	"minecraft:client_entity": {
+		"description": {
+			"identifier": "chessgame:black_shi",
+			"materials": {
+				"default": "entity_alphatest",
+				"invisible": ""
+			},
+			"textures": {
+				"default": "textures/entity/chess_black_shi"
+			},
+			"geometry": {
+				"default": "geometry.model.chess_entity"
+			},
+			"render_controllers": [
+				"controller.render.default"
+			]
+		}
+	}
+}

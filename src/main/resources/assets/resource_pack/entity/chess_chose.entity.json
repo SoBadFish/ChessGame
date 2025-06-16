@@ -1,0 +1,21 @@
+{
+	"format_version": "1.10.0",
+	"minecraft:client_entity": {
+		"description": {
+			"identifier": "chessgame:chose",
+			"materials": {
+				"default": "entity_alphatest",
+				"invisible": ""
+			},
+			"textures": {
+				"default": "textures/entity/chess_chose"
+			},
+			"geometry": {
+				"default": "geometry.chess_entity_chose"
+			},
+			"render_controllers": [
+				"controller.render.default"
+			]
+		}
+	}
+}

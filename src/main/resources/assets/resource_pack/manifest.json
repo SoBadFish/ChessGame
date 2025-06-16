@@ -1,0 +1,17 @@
+{
+   "format_version" : 1,
+   "header" : {
+      "description" : "§l§2象棋游戏专属材质包！",
+      "name" : "§l§6象棋游戏 §7材质",
+      "uuid" : "a291433c-8693-4b07-a8de-6debf2520262",
+      "version" : [ 0, 0, 26 ]
+   },
+   "modules" : [
+      {
+         "description" : "§l§2象棋游戏材质包！",
+         "type" : "resources",
+         "uuid" : "359a2f0c-c041-436e-8439-d53a82739971",
+         "version" : [ 0, 0, 26 ]
+      }
+   ]
+}

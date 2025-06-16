@@ -1,0 +1,35 @@
+{
+	"format_version": "1.12.0",
+	"minecraft:geometry": [
+		{
+			"description": {
+				"identifier": "geometry.chessgame.pan",
+				"texture_width": 256,
+				"texture_height": 256,
+				"visible_bounds_width": 3,
+				"visible_bounds_height": 1.5,
+				"visible_bounds_offset": [0, 0.25, 0]
+			},
+			"bones": [
+				{
+					"name": "bb_main",
+					"pivot": [0, 0, 1],
+					"cubes": [
+						{
+							"origin": [-13.2, 0, -13.5],
+							"size": [25.2, 1, 27],
+							"uv": {
+								"north": {"uv": [25, 0], "uv_size": [25, 1]},
+								"east": {"uv": [25, 1], "uv_size": [25, 1]},
+								"south": {"uv": [25, 2], "uv_size": [25, 1]},
+								"west": {"uv": [25, 3], "uv_size": [25, 1]},
+								"up": {"uv": [0, 0], "uv_size": [256, 256]},
+								"down": {"uv": [0, 44], "uv_size": [12, -19]}
+							}
+						}
+					]
+				}
+			]
+		}
+	]
+}

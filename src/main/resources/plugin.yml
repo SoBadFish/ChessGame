@@ -1,0 +1,8 @@
+name: ChessGame
+description: "象棋游戏"
+main: org.sobadfish.chessgame.ChessGameMainClass
+version: 1.0.1
+api:
+  - 1.0.11
+  - 3.0.0
+load: STARTUP
