@@ -75,16 +75,19 @@ public class ChessEntity extends Entity implements CustomEntity {
      * */
     public void setChose(Player chosePlayer){
         if(isDie){
+            System.out.println("拒绝1");
             return;
         }
 
         if(panEntity != null && panEntity.choseIndexEntity != null && !panEntity.choseIndexEntity.equals(this)){
+            System.out.println("拒绝2");
             return;
         }
 
 
         if(panEntity != null && !hasChose){
             if(panEntity.isEnd){
+                System.out.println("拒绝3");
                 return;
             }
             if(panEntity.isAIMatch()){
@@ -111,16 +114,14 @@ public class ChessEntity extends Entity implements CustomEntity {
         }
         if(hasChose){
             if(panEntity != null){
+
                 if(!panEntity.chessToIndex(pan_index)){
                     ChessPanEntity.ChassPoint point = panEntity.CAN_PLACES.get(panEntity.choseIndex);
                     this.teleport(panEntity.getPosition().add(point.x, 0.1, point.z));
                     this.pan_index = panEntity.choseIndex;
-
-
-
-
                 }else{
                     panEntity.isRedRun = !panEntity.isRedRun;
+
                     //如果开启AI
                     if(panEntity.isAIMatch()){
                         panEntity.goAI();
@@ -130,6 +131,7 @@ public class ChessEntity extends Entity implements CustomEntity {
                 if(panEntity.choseEntity != null){
                     panEntity.choseEntity.close();
                 }
+
             }
             hasChose = false;
 

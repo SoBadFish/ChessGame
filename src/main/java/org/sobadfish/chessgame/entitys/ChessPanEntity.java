@@ -361,6 +361,7 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         ChassPoint point = CAN_PLACES.get(targetIndex);
         sourceEntity.teleport(getPosition().add(point.x, 0.1, point.z));
 
+        choseIndexEntity = null;
 
         return true;
     }
@@ -634,6 +635,7 @@ public class ChessPanEntity extends Entity implements CustomEntity {
 
         Collections.shuffle(validMoves);
         for (int[] move : validMoves) {
+            if (!isValidMoveByIndex(move[0], move[1])) continue;
             simulateMove(move[0], move[1]);
             boolean danger = isUnderThreat(move[1]);
             undoMove(move[0], move[1]);
@@ -644,9 +646,13 @@ public class ChessPanEntity extends Entity implements CustomEntity {
             }
         }
 
-        int[] fallback = validMoves.get(0);
-        choseChessIndex(fallback[0], null, !aiIsRed);
-        chessToIndex(fallback[1]);
+        for (int[] move : validMoves) {
+            if (isValidMoveByIndex(move[0], move[1])) {
+                choseChessIndex(move[0], null, !aiIsRed);
+                chessToIndex(move[1]);
+                return;
+            }
+        }
     }
 
     // ============ 中等难度 =============
@@ -658,6 +664,7 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         LinkedList<int[]> bestMoves = new LinkedList<>();
 
         for (int[] move : validMoves) {
+            if (!isValidMoveByIndex(move[0], move[1])) continue;
             ChessEntity captured = chessEntities.get(move[1]);
             simulateMove(move[0], move[1]);
             int score = evaluateBoard(aiIsRed);
@@ -672,9 +679,11 @@ public class ChessPanEntity extends Entity implements CustomEntity {
             }
         }
 
-        int[] selected = bestMoves.get(new java.util.Random().nextInt(bestMoves.size()));
-        choseChessIndex(selected[0], null, !aiIsRed);
-        chessToIndex(selected[1]);
+        if (!bestMoves.isEmpty()) {
+            int[] selected = bestMoves.get(new java.util.Random().nextInt(bestMoves.size()));
+            choseChessIndex(selected[0], null, !aiIsRed);
+            chessToIndex(selected[1]);
+        }
     }
 
     // ============ 困难（强化 + 动态深度） =============
@@ -688,6 +697,7 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         int dynamicDepth = getDynamicSearchDepth();
 
         for (int[] move : validMoves) {
+            if (!isValidMoveByIndex(move[0], move[1])) continue;
             ChessEntity captured = chessEntities.get(move[1]);
             simulateMove(move[0], move[1]);
             int score = minimax(dynamicDepth - 1, false, Integer.MIN_VALUE, Integer.MAX_VALUE);
@@ -706,6 +716,29 @@ public class ChessPanEntity extends Entity implements CustomEntity {
             doMediumMove();
         }
     }
+
+    private boolean isValidMoveByIndex(int fromIndex, int toIndex) {
+        if (fromIndex < 0 || fromIndex >= 90 || toIndex < 0 || toIndex >= 90) return false;
+        if (!CAN_PLACES.containsKey(fromIndex) || !CAN_PLACES.containsKey(toIndex)) return false;
+
+        ChessEntity from = chessEntities.get(fromIndex);
+        if (from == null) return false;
+
+        int fromRow = fromIndex / 9;
+        int fromCol = fromIndex % 9;
+        int toRow = toIndex / 9;
+        int toCol = toIndex % 9;
+
+        // 修复炮不能斜走
+        if ((from.type == 2 || from.type == 9) && fromRow != toRow && fromCol != toCol) {
+            return false;
+        }
+
+        return isValidMove(from.type, fromRow, fromCol, toRow, toCol);
+    }
+
+
+
 
     private int minimax(int depth, boolean maximizing, int alpha, int beta) {
         if (depth == 0 || isEnd) {
