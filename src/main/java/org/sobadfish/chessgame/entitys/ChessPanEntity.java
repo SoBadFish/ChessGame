@@ -52,14 +52,11 @@ public class ChessPanEntity extends Entity implements CustomEntity {
      * */
     public LinkedList<ChessEntity> BLACK_DIE_LIST = new LinkedList<>();
 
-
     public ChassPoint redDiechassPoint;
 
     public ChassPoint blackDiechassPoint;
 
-
     public ChessChoseEntity choseEntity;
-
 
     public Player choseRedPlayer;
 
@@ -90,8 +87,8 @@ public class ChessPanEntity extends Entity implements CustomEntity {
             isRedRun = namedTag.getBoolean("is_red");
         }
 
-        blackDiechassPoint = new ChassPoint(1.6f,1);
-        redDiechassPoint = new ChassPoint(-1.6f,-1);
+        blackDiechassPoint = new ChassPoint(1.3f,1);
+        redDiechassPoint = new ChassPoint(-1.3f,-1);
         // 初始化棋盘点位 (9列x10行)
         float startX = -1f; // 最左侧x坐标
         float startZ = -1f; // 最上方z坐标
@@ -130,9 +127,6 @@ public class ChessPanEntity extends Entity implements CustomEntity {
                 }
             }
         }
-
-
-
 
     }
 
@@ -308,11 +302,12 @@ public class ChessPanEntity extends Entity implements CustomEntity {
             targetEntity.isDie = true;
             if(targetEntity.type < 7){
                 //黑方
-                BLACK_DIE_LIST.add(targetEntity);
                 targetEntity.teleport(this.add(blackDiechassPoint.x,BLACK_DIE_LIST.size() * 0.05f,blackDiechassPoint.z));
+                BLACK_DIE_LIST.add(targetEntity);
             }else{
-                RED_DIE_LIST.add(targetEntity);
+
                 targetEntity.teleport(this.add(redDiechassPoint.x,RED_DIE_LIST.size() * 0.05f,redDiechassPoint.z));
+                RED_DIE_LIST.add(targetEntity);
             }
             chessEntities.remove(targetIndex);
             //判断是否结束
