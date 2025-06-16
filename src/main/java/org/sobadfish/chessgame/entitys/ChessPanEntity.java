@@ -10,6 +10,7 @@ import cn.nukkit.level.format.FullChunk;
 import cn.nukkit.math.BlockFace;
 import cn.nukkit.nbt.tag.CompoundTag;
 import cn.nukkit.utils.TextFormat;
+import org.sobadfish.chessgame.manager.ThreadManager;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -182,6 +183,7 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         placeChess(13, 5, 9); // 士2
     }
 
+
     private void placeChess(int type, int col, int row) {
         int index = row * 9 + col;
         if (CAN_PLACES.containsKey(index)) {
@@ -249,8 +251,15 @@ public class ChessPanEntity extends Entity implements CustomEntity {
     public void goAI(){
         // 如果是AI对战且轮到AI走棋，触发AI走棋
         if(vsAI && ((aiIsRed && isRedRun) || (!aiIsRed && !isRedRun))) {
-            doAIMove();
-            isRedRun = !isRedRun;
+            ThreadManager.executor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    doAIMove();
+                    isRedRun = !isRedRun;
+                }
+            });
+
+
         }
 
 
@@ -296,7 +305,7 @@ public class ChessPanEntity extends Entity implements CustomEntity {
             return false;
         }
 
-        // 检查是否吃自己的棋子 (type<6是黑方，>=7是红方)
+        // 检查是否吃自己的棋子 (type<6是黑方，>=7是 红方)
         if (targetEntity != null) {
             boolean sourceIsBlack = sourceEntity.type < 7;
             boolean targetIsBlack = targetEntity.type < 7;
@@ -560,9 +569,6 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         this.vsAI = true;
         this.aiIsRed = false; // AI固定为黑方
         this.aiDifficulty = difficulty;
-        if(!isRedRun) { // 黑方回合时立即走棋
-            doAIMove();
-        }
 
     }
 
@@ -598,6 +604,13 @@ public class ChessPanEntity extends Entity implements CustomEntity {
     private static final int MAX_DEPTH = 4; // 深度可调
 
     // ============ AI 调用入口 =============
+    // 完整版：中国象棋 AI 高级版（支持三种难度 + 动态深度优化）
+
+// 文件：ChessAIEnhancement.java
+
+// 假设此为 ChessPanEntity 类的一部分方法
+
+    // ============ AI 调用入口 =============
     private void doAIMove() {
         if (!vsAI || isEnd) return;
 
@@ -614,7 +627,7 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         }
     }
 
-    // ============ 难度：简单 =============
+    // ============ 简单难度 =============
     private void doRandomMove() {
         LinkedList<int[]> validMoves = getAllValidMoves();
         if (validMoves.isEmpty()) return;
@@ -631,13 +644,12 @@ public class ChessPanEntity extends Entity implements CustomEntity {
             }
         }
 
-        // fallback
         int[] fallback = validMoves.get(0);
         choseChessIndex(fallback[0], null, !aiIsRed);
         chessToIndex(fallback[1]);
     }
 
-    // ============ 难度：中等 =============
+    // ============ 中等难度 =============
     private void doMediumMove() {
         LinkedList<int[]> validMoves = getAllValidMoves();
         if (validMoves.isEmpty()) return;
@@ -665,7 +677,7 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         chessToIndex(selected[1]);
     }
 
-    // ============ 难度：困难 =============
+    // ============ 困难（强化 + 动态深度） =============
     private void doHardMove() {
         LinkedList<int[]> validMoves = getAllValidMoves();
         if (validMoves.isEmpty()) return;
@@ -673,10 +685,12 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         int bestScore = Integer.MIN_VALUE;
         int[] bestMove = null;
 
+        int dynamicDepth = getDynamicSearchDepth();
+
         for (int[] move : validMoves) {
             ChessEntity captured = chessEntities.get(move[1]);
             simulateMove(move[0], move[1]);
-            int score = minimax(MAX_DEPTH - 1, false, Integer.MIN_VALUE, Integer.MAX_VALUE);
+            int score = minimax(dynamicDepth - 1, false, Integer.MIN_VALUE, Integer.MAX_VALUE);
             undoMove(move[0], move[1], captured);
 
             if (score > bestScore) {
@@ -689,13 +703,10 @@ public class ChessPanEntity extends Entity implements CustomEntity {
             choseChessIndex(bestMove[0], null, !aiIsRed);
             chessToIndex(bestMove[1]);
         } else {
-            doMediumMove(); // fallback
+            doMediumMove();
         }
     }
 
-    /**
-     * 极小极大算法
-     * */
     private int minimax(int depth, boolean maximizing, int alpha, int beta) {
         if (depth == 0 || isEnd) {
             return evaluateBoard(aiIsRed);
@@ -731,7 +742,79 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         }
     }
 
-    // ============ 状态操作 =============
+    // ============ 评估函数（强化） =============
+    private int evaluateBoard(boolean forRed) {
+        int[] values = {1000, 10, 50, 100, 50, 20, 20, 1000, 10, 50, 100, 50, 20, 20};
+        int score = 0;
+
+        for (Map.Entry<Integer, ChessEntity> entry : chessEntities.entrySet()) {
+            int index = entry.getKey();
+            ChessEntity entity = entry.getValue();
+            int base = values[entity.type];
+
+            int col = index % 9;
+            int row = index / 9;
+
+            if (col >= 3 && col <= 5) base += 5;
+            if ((entity.type == 8 && row <= 4) || (entity.type == 1 && row >= 5)) base += 10;
+            if (isUnderThreat(index)) base -= 20;
+
+            score += (entity.type >= 7 == forRed) ? base : -base;
+        }
+
+        return score;
+    }
+
+    private boolean isUnderThreat(int index) {
+        ChessEntity target = chessEntities.get(index);
+        if (target == null) return false;
+        boolean targetIsRed = target.type >= 7;
+
+        for (Map.Entry<Integer, ChessEntity> entry : chessEntities.entrySet()) {
+            int i = entry.getKey();
+            ChessEntity attacker = entry.getValue();
+            if ((attacker.type >= 7) == targetIsRed) continue;
+
+            int r1 = i / 9, c1 = i % 9;
+            int r2 = index / 9, c2 = index % 9;
+            if (isValidMove(attacker.type, r1, c1, r2, c2)) return true;
+        }
+        return false;
+    }
+
+    // ============ 动态深度判定 =============
+    private int getDynamicSearchDepth() {
+        int totalPieces = chessEntities.size();
+        int aggressiveMoves = countCapturingMoves();
+
+        if (totalPieces <= 10 || isEndGameSituation()) {
+            return 5;
+        } else if (aggressiveMoves >= 5) {
+            return 4;
+        } else {
+            return 3;
+        }
+    }
+
+    private boolean isEndGameSituation() {
+        int red = 0, black = 0;
+        for (ChessEntity e : chessEntities.values()) {
+            if (e.type < 7) black++;
+            else red++;
+        }
+        return red <= 3 || black <= 3;
+    }
+
+    private int countCapturingMoves() {
+        int count = 0;
+        LinkedList<int[]> moves = getAllValidMoves();
+        for (int[] move : moves) {
+            if (chessEntities.get(move[1]) != null) count++;
+        }
+        return count;
+    }
+
+    // ============ 模拟与撤销 =============
     private void simulateMove(int from, int to) {
         ChessEntity e = chessEntities.remove(from);
         chessEntities.put(to, e);
@@ -751,60 +834,7 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         undoMove(from, to, null);
     }
 
-    /**
-     * 评估当前棋盘状态对AI方的价值
-     * @param forRed 评估红方的优势
-     * @return 评估分数，正数表示优势
-     */
-    private int evaluateBoard(boolean forRed) {
-        int[] values = {1000, 10, 50, 100, 50, 20, 20, 1000, 10, 50, 100, 50, 20, 20};
-        int score = 0;
-
-        for (Map.Entry<Integer, ChessEntity> entry : chessEntities.entrySet()) {
-            int index = entry.getKey();
-            ChessEntity entity = entry.getValue();
-            int base = values[entity.type];
-
-            int col = index % 9;
-            int row = index / 9;
-
-            // 中路控制 +5
-            if (col >= 3 && col <= 5) base += 5;
-
-            // 红兵过河/黑兵过河 +10
-            if ((entity.type == 8 && row <= 4) || (entity.type == 1 && row >= 5)) base += 10;
-
-            // 判断是否被攻击，扣分
-            if (isUnderThreat(index)) base -= 20;
-
-            // 加入评分
-            score += (entity.type >= 7 == forRed) ? base : -base;
-        }
-
-        return score;
-    }
-
-    // ============ 判断该位置是否被敌方攻击 =============
-    private boolean isUnderThreat(int index) {
-        ChessEntity target = chessEntities.get(index);
-        if (target == null) return false;
-        boolean targetIsRed = target.type >= 7;
-
-        for (Map.Entry<Integer, ChessEntity> entry : chessEntities.entrySet()) {
-            int i = entry.getKey();
-            ChessEntity attacker = entry.getValue();
-            if ((attacker.type >= 7) == targetIsRed) continue;
-
-            int r1 = i / 9, c1 = i % 9;
-            int r2 = index / 9, c2 = index % 9;
-            if (isValidMove(attacker.type, r1, c1, r2, c2)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-
+// 其余方法如 getAllValidMoves(), isValidMove(), choseChessIndex() 等需配合原始逻辑保留
 
 
     private LinkedList<int[]> getAllValidMoves() {
@@ -866,6 +896,8 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         for(ChessEntity entity: BLACK_DIE_LIST){
             entity.close();
         }
+        RED_DIE_LIST.clear();
+        BLACK_DIE_LIST.clear();
         chessEntities.clear();
     }
 
