@@ -759,13 +759,32 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         List<Integer> threats = getKingThreats();
         boolean kingInDanger = !threats.isEmpty();
 
-        // 优先检查是否能直接将军
+        // 优先检查所有将军机会(包括炮将军)
         for (int[] move : moves) {
+            ChessEntity source = chessEntities.get(move[0]);
             ChessEntity target = chessEntities.get(move[1]);
-            if (target != null && target.type == 7) {
-                choseChessIndex(move[0], null, false);
-                chessToIndex(move[1]);
-                return;
+
+            // 模拟移动检查是否能将军
+            simulateMove(move[0], move[1]);
+            boolean canCheck = isOpponentInCheck();
+            undoMove(move[0], move[1], target);
+
+            if (canCheck) {
+                // 如果是炮将军，确保中间有炮架
+                if ((source.type == 2 || source.type == 9) &&
+                    countPiecesBetween(move[0]/9, move[0]%9, move[1]/9, move[1]%9) != 1) {
+                    continue;
+                }
+                // 额外检查移动后自身是否安全
+                simulateMove(move[0], move[1]);
+                boolean safeAfterMove = !isSelfInCheck();
+                undoMove(move[0], move[1], target);
+
+                if (safeAfterMove) {
+                    choseChessIndex(move[0], null, false);
+                    chessToIndex(move[1]);
+                    return;
+                }
             }
         }
 
@@ -837,7 +856,37 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         int bestScore = Integer.MIN_VALUE;
         int[] bestMove = null;
 
-        // 1. 将军保护优先级提升
+        // 1. 优先处理所有将军机会(包括炮将军)
+        for (int[] move : moves) {
+            ChessEntity source = chessEntities.get(move[0]);
+            ChessEntity target = chessEntities.get(move[1]);
+
+            // 模拟移动检查是否能将军
+            simulateMove(move[0], move[1]);
+            boolean canCheck = isOpponentInCheck();
+            undoMove(move[0], move[1], target);
+
+            if (canCheck) {
+                // 如果是炮将军，确保中间有炮架
+                if ((source.type == 2 || source.type == 9) &&
+                    countPiecesBetween(move[0]/9, move[0]%9, move[1]/9, move[1]%9) != 1) {
+                    continue;
+                }
+                // 深度检查移动后局面
+                simulateMove(move[0], move[1]);
+                boolean safeAfterMove = !isSelfInCheck();
+                boolean isCheckmate = canCheck && countOpponentKingEscapeRoutes() == 0;
+                undoMove(move[0], move[1], target);
+
+                if (safeAfterMove || isCheckmate) {
+                    choseChessIndex(move[0], null, false);
+                    chessToIndex(move[1]);
+                    return;
+                }
+            }
+        }
+
+        // 2. 将军保护优先级提升
         int kingIndex = findBlackKingIndex();
         List<Integer> threats = getKingThreats();
         boolean kingInDanger = !threats.isEmpty();
@@ -1020,32 +1069,32 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         return (col >= 3 && col <= 5) && (row >= 0 && row <= 2 || row >= 7 && row <= 9);
     }
 
-    private int countOpponentKingEscapeRoutes() {
-        int kingType = 7; // 红方将
-        int kingIndex = -1;
-        for (Map.Entry<Integer, ChessEntity> entry : chessEntities.entrySet()) {
-            if (entry.getValue().type == kingType) {
-                kingIndex = entry.getKey();
-                break;
-            }
-        }
-        if (kingIndex == -1) return 0;
-
-        int row = kingIndex / 9, col = kingIndex % 9;
-        int count = 0;
-        for (int r = -1; r <= 1; r++) {
-            for (int c = -1; c <= 1; c++) {
-                if (Math.abs(r) + Math.abs(c) != 1) continue;
-                int nr = row + r, nc = col + c;
-                if (nr < 0 || nr >= 10 || nc < 0 || nc >= 9) continue;
-                int toIndex = nr * 9 + nc;
-                if (!isValidMove(kingType, row, col, nr, nc)) continue;
-                ChessEntity occupant = chessEntities.get(toIndex);
-                if (occupant == null || occupant.type < 7) count++;
-            }
-        }
-        return count;
-    }
+//    private int countOpponentKingEscapeRoutes() {
+//        int kingType = 7; // 红方将
+//        int kingIndex = -1;
+//        for (Map.Entry<Integer, ChessEntity> entry : chessEntities.entrySet()) {
+//            if (entry.getValue().type == kingType) {
+//                kingIndex = entry.getKey();
+//                break;
+//            }
+//        }
+//        if (kingIndex == -1) return 0;
+//
+//        int row = kingIndex / 9, col = kingIndex % 9;
+//        int count = 0;
+//        for (int r = -1; r <= 1; r++) {
+//            for (int c = -1; c <= 1; c++) {
+//                if (Math.abs(r) + Math.abs(c) != 1) continue;
+//                int nr = row + r, nc = col + c;
+//                if (nr < 0 || nr >= 10 || nc < 0 || nc >= 9) continue;
+//                int toIndex = nr * 9 + nc;
+//                if (!isValidMove(kingType, row, col, nr, nc)) continue;
+//                ChessEntity occupant = chessEntities.get(toIndex);
+//                if (occupant == null || occupant.type < 7) count++;
+//            }
+//        }
+//        return count;
+//    }
 
     private boolean isFork(int targetIndex) {
         int threatCount = 0;
@@ -1197,6 +1246,7 @@ public class ChessPanEntity extends Entity implements CustomEntity {
     private boolean isInCheck(boolean forRed) {
         int kingType = forRed ? 7 : 0;
         int kingIndex = -1;
+        // 查找将/帅位置
         for (var entry : chessEntities.entrySet()) {
             if (entry.getValue().type == kingType) {
                 kingIndex = entry.getKey();
@@ -1206,11 +1256,36 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         if (kingIndex == -1) return true;
 
         int kr = kingIndex / 9, kc = kingIndex % 9;
+        // 检查所有可能的攻击
         for (var entry : chessEntities.entrySet()) {
             ChessEntity e = entry.getValue();
-            if ((e.type >= 7) == forRed) continue;
+            if ((e.type >= 7) == forRed) continue; // 跳过友方棋子
+
             int sr = entry.getKey() / 9, sc = entry.getKey() % 9;
-            if (isValidMove(e.type, sr, sc, kr, kc)) return true;
+            // 特殊处理炮的攻击规则
+            if (e.type == 2 || e.type == 9) { // 炮
+                int count = countPiecesBetween(sr, sc, kr, kc);
+                if (count == 1 && isValidMove(e.type, sr, sc, kr, kc)) {
+                    return true;
+                }
+            }
+            // 特殊处理马腿
+            else if (e.type == 4 || e.type == 11) { // 马
+                int rowDiff = Math.abs(sr - kr);
+                int colDiff = Math.abs(sc - kc);
+                if ((rowDiff == 2 && colDiff == 1) || (rowDiff == 1 && colDiff == 2)) {
+                    // 检查马腿
+                    int legRow = sr + (kr - sr) / 2;
+                    int legCol = sc + (kc - sc) / 2;
+                    if (chessEntities.get(legRow * 9 + legCol) == null) {
+                        return true;
+                    }
+                }
+            }
+            // 其他棋子
+            else if (isValidMove(e.type, sr, sc, kr, kc)) {
+                return true;
+            }
         }
         return false;
     }
@@ -1581,28 +1656,92 @@ public class ChessPanEntity extends Entity implements CustomEntity {
 
     private int evaluateBoard(boolean forRed) {
         int baseScore = 0;
+
+        // 1. 棋子价值评估
         for (Map.Entry<Integer, ChessEntity> entry : chessEntities.entrySet()) {
             ChessEntity entity = entry.getValue();
             int type = entity.type;
             int value = getPieceValue(type);
             baseScore += ((type >= 7) == forRed ? value : -value);
+        }
 
-            // 黑方棋子位置加成
-            if(type < 7) {
-                int row = entry.getKey() / 9;
-                int col = entry.getKey() % 9;
-                // 鼓励黑方棋子控制中心区域
-                if(col >= 3 && col <= 5 && row >= 3 && row <= 6) {
-                    baseScore += 20;
-                }
+        // 2. 位置优势评估
+        for (Map.Entry<Integer, ChessEntity> entry : chessEntities.entrySet()) {
+            ChessEntity entity = entry.getValue();
+            int type = entity.type;
+            int row = entry.getKey() / 9;
+            int col = entry.getKey() % 9;
+
+            // 鼓励控制中心区域
+            if(col >= 3 && col <= 5 && row >= 3 && row <= 6) {
+                baseScore += ((type >= 7) == forRed ? 15 : -15);
+            }
+
+            // 鼓励棋子进入对方半场
+            if((type < 7 && row > 4) || (type >= 7 && row < 5)) {
+                baseScore += ((type >= 7) == forRed ? 10 : -10);
             }
         }
 
+        // 3. 特殊局面评估
         if (isOnlyKingLeft(true) && isOnlyKingLeft(false)) baseScore = 0;
         if (isTwoSoldiersDeadlock()) baseScore = 0;
         if (detectFortressFormation()) baseScore -= 200;
 
+        // 4. 将军状态评估
+        if (isInCheck(!forRed)) {
+            baseScore += (forRed ? 300 : -300);
+            // 绝杀局面
+            if (countOpponentKingEscapeRoutes() == 0) {
+                baseScore += (forRed ? 10000 : -10000);
+            }
+        }
+
         return baseScore;
+    }
+
+    /**
+     * 计算对方将/帅的逃生路线数量
+     */
+    private int countOpponentKingEscapeRoutes() {
+        int kingType = 7; // 红方将
+        int kingIndex = -1;
+        for (Map.Entry<Integer, ChessEntity> entry : chessEntities.entrySet()) {
+            if (entry.getValue().type == kingType) {
+                kingIndex = entry.getKey();
+                break;
+            }
+        }
+        if (kingIndex == -1) return 0;
+
+        int row = kingIndex / 9, col = kingIndex % 9;
+        int escapeRoutes = 0;
+
+        // 检查四个方向的移动可能
+        int[][] directions = {{0,1},{1,0},{0,-1},{-1,0}};
+        for (int[] dir : directions) {
+            int newRow = row + dir[0];
+            int newCol = col + dir[1];
+            if (newRow >= 7 && newRow <= 9 && newCol >= 3 && newCol <= 5) {
+                int newIndex = newRow * 9 + newCol;
+                ChessEntity target = chessEntities.get(newIndex);
+                if (target == null || target.type < 7) {
+                    // 检查移动后是否安全
+                    boolean safe = true;
+                    for (Map.Entry<Integer, ChessEntity> entry : chessEntities.entrySet()) {
+                        ChessEntity e = entry.getValue();
+                        if (e.type >= 7) continue; // 跳过友方
+                        int sr = entry.getKey() / 9, sc = entry.getKey() % 9;
+                        if (isValidMove(e.type, sr, sc, newRow, newCol)) {
+                            safe = false;
+                            break;
+                        }
+                    }
+                    if (safe) escapeRoutes++;
+                }
+            }
+        }
+        return escapeRoutes;
     }
 
     private int getDynamicSearchDepth() {
