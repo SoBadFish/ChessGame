@@ -75,19 +75,15 @@ public class ChessEntity extends Entity implements CustomEntity {
      * */
     public void setChose(Player chosePlayer){
         if(isDie){
-            System.out.println("拒绝1");
             return;
         }
 
         if(panEntity != null && panEntity.choseIndexEntity != null && !panEntity.choseIndexEntity.equals(this)){
-            System.out.println("拒绝2");
             return;
         }
 
-
         if(panEntity != null && !hasChose){
             if(panEntity.isEnd){
-                System.out.println("拒绝3");
                 return;
             }
             if(panEntity.isAIMatch()){
