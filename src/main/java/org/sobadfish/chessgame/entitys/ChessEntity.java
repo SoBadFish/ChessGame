@@ -96,11 +96,16 @@ public class ChessEntity extends Entity implements CustomEntity {
                 this.chosePlayer = chosePlayer;
                 this.hasChose = true;
                 panEntity.choseChessIndex(pan_index,chosePlayer,type < 7);
-                //生成一个选中效果
-                panEntity.choseEntity = new ChessChoseEntity(this.getChunk(), Entity.getDefaultNBT(
-                        this
-                ));
-                panEntity.choseEntity.spawnToAll();
+                if(panEntity.choseEntity == null) {
+                    //生成一个选中效果
+                    panEntity.choseEntity = new ChessChoseEntity(this.getChunk(), Entity.getDefaultNBT(
+                            this
+                    ));
+                    panEntity.choseEntity.spawnToAll();
+                }else{
+                    Vector3 pos = panEntity.getChessPoint(pan_index);
+                    panEntity.choseEntity.teleport(pos);
+                }
 
                 return;
             }else{
@@ -116,17 +121,25 @@ public class ChessEntity extends Entity implements CustomEntity {
                     this.teleport(panEntity.getPosition().add(point.x, 0.1, point.z));
                     this.pan_index = panEntity.choseIndex;
                 }else{
-                    panEntity.isRedRun = !panEntity.isRedRun;
 
+                    panEntity.isRedRun = !panEntity.isRedRun;
                     //如果开启AI
                     if(panEntity.isAIMatch()){
+                        panEntity.choseIndexEntity = null;
+                        hasChose = false;
                         panEntity.goAI();
+
+                        return;
                     }
                 }
                 panEntity.choseIndexEntity = null;
-                if(panEntity.choseEntity != null){
-                    panEntity.choseEntity.close();
+                if(panEntity.choseEntity != null) {
+                    panEntity.choseEntity.teleport(panEntity.getChessPoint(pan_index));
+
                 }
+//                if(panEntity.choseEntity != null){
+//                    panEntity.choseEntity.close();
+//                }
 
             }
             hasChose = false;
@@ -191,10 +204,8 @@ public class ChessEntity extends Entity implements CustomEntity {
                     } else {
                         this.teleport(targetPos);
                     }
-
                     if(panEntity.choseEntity != null){
-                        panEntity.choseEntity.close();
-                        panEntity.choseEntity = null;
+                        panEntity.choseEntity.teleport(panEntity.getChessPoint(pan_index));
                     }
                 }
             }

@@ -2,6 +2,7 @@ package org.sobadfish.chessgame.manager;
 
 import cn.nukkit.Player;
 import cn.nukkit.form.response.FormResponse;
+import cn.nukkit.utils.Utils;
 import org.sobadfish.chessgame.form.ICustomForm;
 
 import java.util.LinkedHashMap;
@@ -35,7 +36,7 @@ public class FormManager {
         form.onCreateView();
         String playerName = player.getName();
         fromObj.put(playerName, form);
-        int size = player.formWindows.size()+1;
+        int size = player.formWindows.size()+ Utils.rand(1,100);
         form.setFormId(size);
         player.showFormWindow(form.asWindows(),size);
 
@@ -43,14 +44,14 @@ public class FormManager {
 
     /**
      * 移除指定玩家的表单
+     *
      * @param playerName 玩家名称
-     * @return 被移除的表单对象，如果不存在则返回null
      */
-    public ICustomForm<?> removeForm(String playerName) {
+    public void removeForm(String playerName) {
         if (playerName == null || playerName.isEmpty()) {
-            return null;
+            return;
         }
-        return fromObj.remove(playerName);
+        fromObj.remove(playerName);
     }
 
     /**

@@ -8,6 +8,7 @@ import cn.nukkit.event.entity.EntityDamageEvent;
 import cn.nukkit.level.Position;
 import cn.nukkit.level.format.FullChunk;
 import cn.nukkit.math.BlockFace;
+import cn.nukkit.math.Vector3;
 import cn.nukkit.nbt.tag.CompoundTag;
 import cn.nukkit.utils.TextFormat;
 import cn.nukkit.utils.Utils;
@@ -26,10 +27,9 @@ public class ChessPanEntity extends Entity implements CustomEntity {
 
     private AIDifficulty aiDifficulty = AIDifficulty.EASY;
     private boolean vsAI = false;
-    private boolean aiIsRed = false;
     public BlockFace placeFace;
 
-    /**
+    /*
      * 象棋棋盘是 9*10 的大小，每个点位都有 x z 两个值
      */
 
@@ -54,6 +54,8 @@ public class ChessPanEntity extends Entity implements CustomEntity {
     public Player choseRedPlayer;
 
     public Player choseBlackPlayer;
+
+    public int lastMoveIndex = 0;
 
     // 安全评估方法
     private boolean isMoveSafe(int[] move, ChessEntity captured, boolean kingInDanger) {
@@ -187,6 +189,14 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         placeChess(13, 5, 9); // 士2
     }
 
+    /**
+     * 获取点位坐标
+     * */
+    public Vector3 getChessPoint(int index){
+        ChessPanEntity.ChassPoint point = CAN_PLACES.get(index);
+        return getPosition().add(point.x, 0.1, point.z);
+
+    }
 
     private void placeChess(int type, int col, int row) {
         int index = row * 9 + col;
@@ -346,6 +356,7 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         // 更新位置
         ChassPoint point = CAN_PLACES.get(targetIndex);
         sourceEntity.teleport(getPosition().add(point.x, 0.1, point.z));
+        lastMoveIndex = targetIndex;
 
         choseIndexEntity = null;
 
@@ -383,8 +394,7 @@ public class ChessPanEntity extends Entity implements CustomEntity {
                 if (!((rowDiff == 1 && colDiff == 0) || (rowDiff == 0 && colDiff == 1))) return false;
                 if (targetCol < 3 || targetCol > 5) return false;
                 if (chessType == 0 && targetRow > 2) return false;  // 黑将只能在0~2行
-                if (chessType == 7 && targetRow < 7) return false;  // 红帅只能在7~9行
-                return true;
+                return chessType != 7 || targetRow >= 7;  // 红帅只能在7~9行
             }
 
             case 1: case 8: // 兵/卒
@@ -459,64 +469,6 @@ public class ChessPanEntity extends Entity implements CustomEntity {
             default:
                 return false;
         }
-    }
-
-    /**
-     * 计算两点之间的棋子数量
-     */
-    // 兵/卒移动验证已整合到isValidMove方法中
-
-    /**
-     * 炮移动验证
-     */
-    private boolean isValidCannonMove(int sourceRow, int sourceCol,
-                                      int targetRow, int targetCol, ChessEntity targetEntity) {
-        int rowDiff = Math.abs(targetRow - sourceRow);
-        int colDiff = Math.abs(targetCol - sourceCol);
-
-        // 必须直线移动
-        if (rowDiff != 0 && colDiff != 0) return false;
-
-        int count = countPiecesBetween(sourceRow, sourceCol, targetRow, targetCol);
-        if (targetEntity == null) {
-            return count == 0; // 移动时不能有子
-        } else {
-            return count == 1; // 吃子时必须有一个炮架
-        }
-    }
-
-    /**
-     * 车移动验证
-     */
-    private boolean isValidChariotMove(int sourceRow, int sourceCol,
-                                       int targetRow, int targetCol) {
-        int rowDiff = Math.abs(targetRow - sourceRow);
-        int colDiff = Math.abs(targetCol - sourceCol);
-
-        // 必须直线移动
-        if (rowDiff != 0 && colDiff != 0) {
-            return false;
-        }
-        return countPiecesBetween(sourceRow, sourceCol, targetRow, targetCol) == 0;
-    }
-
-    /**
-     * 马移动验证
-     */
-    private boolean isValidHorseMove(int sourceRow, int sourceCol,
-                                     int targetRow, int targetCol) {
-        int rowDiff = Math.abs(targetRow - sourceRow);
-        int colDiff = Math.abs(targetCol - sourceCol);
-
-        // 必须走日字
-        if (!((rowDiff == 2 && colDiff == 1) || (rowDiff == 1 && colDiff == 2))) {
-            return false;
-        }
-
-        // 检查马脚
-        int horseLegRow = sourceRow + (targetRow - sourceRow) / 2;
-        int horseLegCol = sourceCol + (targetCol - sourceCol) / 2;
-        return chessEntities.get(horseLegRow * 9 + horseLegCol) == null;
     }
 
 
@@ -615,7 +567,6 @@ public class ChessPanEntity extends Entity implements CustomEntity {
      */
     public void startAIMatch(AIDifficulty difficulty) {
         this.vsAI = true;
-        this.aiIsRed = false; // AI固定为黑方
         this.aiDifficulty = difficulty;
 
     }
@@ -1454,6 +1405,10 @@ public class ChessPanEntity extends Entity implements CustomEntity {
             ThreadManager.executor.execute(() -> {
                 doAIMove();
                 isRedRun = !isRedRun;
+                if(choseEntity != null){
+                    choseEntity.teleport(getChessPoint(lastMoveIndex));
+
+                }
             });
         }
     }
