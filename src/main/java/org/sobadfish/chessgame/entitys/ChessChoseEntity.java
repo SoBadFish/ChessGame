@@ -12,6 +12,7 @@ public class ChessChoseEntity extends Entity implements CustomEntity {
     public ChessChoseEntity(FullChunk chunk, CompoundTag nbt) {
         super(chunk, nbt);
         setScale(0.2f);
+        this.saveWithChunk = false;
     }
 
     @Override

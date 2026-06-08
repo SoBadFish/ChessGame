@@ -12,11 +12,18 @@ import cn.nukkit.math.Vector3;
 import cn.nukkit.nbt.tag.CompoundTag;
 import cn.nukkit.utils.TextFormat;
 import cn.nukkit.utils.Utils;
-import org.sobadfish.chessgame.manager.ThreadManager;
+import org.sobadfish.chessgame.ChessGameMainClass;
 
 import java.util.*;
 
 public class ChessPanEntity extends Entity implements CustomEntity {
+
+    private static final String KEY_CHESS_DATA = "chess_data";
+    private static final String KEY_ALIVE_PREFIX = "alive_";
+    private static final String KEY_RED_DEAD_PREFIX = "red_dead_";
+    private static final String KEY_BLACK_DEAD_PREFIX = "black_dead_";
+    private static final String KEY_RED_DEAD_COUNT = "red_dead_count";
+    private static final String KEY_BLACK_DEAD_COUNT = "black_dead_count";
 
     // AI难度级别
     public enum AIDifficulty {
@@ -79,6 +86,8 @@ public class ChessPanEntity extends Entity implements CustomEntity {
      * */
     public boolean isEnd;
 
+    private boolean managerRegistered;
+
 
 
     public ChessPanEntity(FullChunk chunk, CompoundTag nbt) {
@@ -118,39 +127,17 @@ public class ChessPanEntity extends Entity implements CustomEntity {
                 index++;
             }
         }
-        //TODO 在这里增加还原
-        if(namedTag.contains("chess_data")){
-            CompoundTag tag = namedTag.getCompound("chess_data");
-            for(int i = 0;i<90;i++){
-                if(tag.contains(i+"")){
-                    int type = tag.getInt(i+"");
-                    if(tag.contains("isDie") && tag.getBoolean("isDie")){
-                        ChessEntity targetEntity;
-                        if(type < 7){
-                            targetEntity = getChessEntityByType(type,this.add(blackDiechassPoint.x,BLACK_DIE_LIST.size() * 0.03f,blackDiechassPoint.z),-1);
-                            //黑方
-                            BLACK_DIE_LIST.add(targetEntity);
-                        }else{
-                            targetEntity = getChessEntityByType(type,this.add(redDiechassPoint.x,RED_DIE_LIST.size() * 0.03f,redDiechassPoint.z),-1);
-                            RED_DIE_LIST.add(targetEntity);
-
-                        }
-                    }else{
-
-                        placeChess(type,i);
-                    }
-
-                }
-            }
+        if(namedTag.contains(KEY_CHESS_DATA)){
+            restoreChessData(namedTag.getCompound(KEY_CHESS_DATA));
         }
-
+        registerBoard();
     }
 
 
 
     public void initChess(){
         //清除tag
-        namedTag.remove("chess_data");
+        namedTag.remove(KEY_CHESS_DATA);
         // 初始化棋子位置 (黑方:0-6, 红方:7-13)
         // 黑方棋子 (将,兵,炮,车,马,象,士)
         placeChess(0, 4, 0);  // 将
@@ -187,6 +174,68 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         placeChess(12, 6, 9); // 象2
         placeChess(13, 3, 9); // 士1
         placeChess(13, 5, 9); // 士2
+    }
+
+    private void restoreChessData(CompoundTag tag) {
+        boolean restored = false;
+        for (int i = 0; i < 90; i++) {
+            String aliveKey = KEY_ALIVE_PREFIX + i;
+            if (tag.contains(aliveKey)) {
+                placeChess(tag.getInt(aliveKey), i);
+                restored = true;
+            }
+        }
+        int redDeadCount = tag.getInt(KEY_RED_DEAD_COUNT);
+        for (int i = 0; i < redDeadCount; i++) {
+            String key = KEY_RED_DEAD_PREFIX + i;
+            if (tag.contains(key)) {
+                ChessEntity targetEntity = getChessEntityByType(tag.getInt(key),
+                        this.add(redDiechassPoint.x, RED_DIE_LIST.size() * 0.03f, redDiechassPoint.z), -1);
+                RED_DIE_LIST.add(targetEntity);
+                restored = true;
+            }
+        }
+        int blackDeadCount = tag.getInt(KEY_BLACK_DEAD_COUNT);
+        for (int i = 0; i < blackDeadCount; i++) {
+            String key = KEY_BLACK_DEAD_PREFIX + i;
+            if (tag.contains(key)) {
+                ChessEntity targetEntity = getChessEntityByType(tag.getInt(key),
+                        this.add(blackDiechassPoint.x, BLACK_DIE_LIST.size() * 0.03f, blackDiechassPoint.z), -1);
+                BLACK_DIE_LIST.add(targetEntity);
+                restored = true;
+            }
+        }
+        if (!restored) {
+            restoreLegacyChessData(tag);
+        }
+    }
+
+    private void restoreLegacyChessData(CompoundTag tag) {
+        for (int i = 0; i < 90; i++) {
+            if (tag.contains(i + "")) {
+                placeChess(tag.getInt(i + ""), i);
+            }
+        }
+    }
+
+    private void registerBoard() {
+        ChessGameMainClass mainClass = ChessGameMainClass.getInstance();
+        if (!managerRegistered && mainClass != null && mainClass.getChessBoardManager() != null) {
+            mainClass.getChessBoardManager().registerBoard(this);
+            managerRegistered = true;
+        }
+    }
+
+    private void unregisterBoard() {
+        ChessGameMainClass mainClass = ChessGameMainClass.getInstance();
+        if (managerRegistered && mainClass != null && mainClass.getChessBoardManager() != null) {
+            mainClass.getChessBoardManager().unregisterBoard(this);
+            managerRegistered = false;
+        }
+    }
+
+    public boolean isDisposed() {
+        return this.closed;
     }
 
     /**
@@ -537,12 +586,24 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         for(Integer index : chessEntities.keySet()) {
             ChessEntity entity = chessEntities.get(index);
             if(entity != null) {
-                chessData.putInt(index.toString(), entity.type);
-                chessData.putBoolean("isDie", entity.isDie);
+                chessData.putInt(KEY_ALIVE_PREFIX + index, entity.type);
             }
-
         }
-        namedTag.putCompound("chess_data", chessData);
+        chessData.putInt(KEY_RED_DEAD_COUNT, RED_DIE_LIST.size());
+        for (int i = 0; i < RED_DIE_LIST.size(); i++) {
+            ChessEntity entity = RED_DIE_LIST.get(i);
+            if (entity != null) {
+                chessData.putInt(KEY_RED_DEAD_PREFIX + i, entity.type);
+            }
+        }
+        chessData.putInt(KEY_BLACK_DEAD_COUNT, BLACK_DIE_LIST.size());
+        for (int i = 0; i < BLACK_DIE_LIST.size(); i++) {
+            ChessEntity entity = BLACK_DIE_LIST.get(i);
+            if (entity != null) {
+                chessData.putInt(KEY_BLACK_DEAD_PREFIX + i, entity.type);
+            }
+        }
+        namedTag.putCompound(KEY_CHESS_DATA, chessData);
         namedTag.putBoolean("is_end", isEnd);
         namedTag.putBoolean("is_red", isRedRun);
         namedTag.putBoolean("vs_ai", vsAI);
@@ -1303,6 +1364,7 @@ public class ChessPanEntity extends Entity implements CustomEntity {
 
     @Override
     public void close() {
+        unregisterBoard();
         clear();
         super.close();
     }
@@ -1323,8 +1385,12 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         if(choseEntity != null){
             choseEntity.close();
         }
+        choseEntity = null;
         isEnd = false;
         isRedRun = true;
+        choseRedPlayer = null;
+        choseBlackPlayer = null;
+        lastMoveIndex = 0;
         //清空死亡的
         for(ChessEntity entity: RED_DIE_LIST){
             entity.close();
@@ -1335,6 +1401,30 @@ public class ChessPanEntity extends Entity implements CustomEntity {
         RED_DIE_LIST.clear();
         BLACK_DIE_LIST.clear();
         chessEntities.clear();
+        cleanupNearbyDetachedPieces();
+    }
+
+    private void cleanupNearbyDetachedPieces() {
+        if (this.getLevel() == null) {
+            return;
+        }
+        for (Entity entity : this.getLevel().getEntities()) {
+            if (entity == null || entity == this || entity.closed) {
+                continue;
+            }
+            if (entity.distanceSquared(this) > 16) {
+                continue;
+            }
+            if (entity instanceof ChessEntity chessEntity) {
+                if (chessEntity.panEntity == null || chessEntity.panEntity == this) {
+                    entity.close();
+                }
+                continue;
+            }
+            if (entity instanceof ChessChoseEntity) {
+                entity.close();
+            }
+        }
     }
 
     public void resetChess() {
@@ -1402,14 +1492,13 @@ public class ChessPanEntity extends Entity implements CustomEntity {
 
     public void goAI() {
         if(vsAI && !isRedRun) {
-            ThreadManager.executor.execute(() -> {
-                doAIMove();
+            doAIMove();
+            if(!isEnd) {
                 isRedRun = !isRedRun;
-                if(choseEntity != null){
-                    choseEntity.teleport(getChessPoint(lastMoveIndex));
-
-                }
-            });
+            }
+            if(choseEntity != null){
+                choseEntity.teleport(getChessPoint(lastMoveIndex));
+            }
         }
     }
 

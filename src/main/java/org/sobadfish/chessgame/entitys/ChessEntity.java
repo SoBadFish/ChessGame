@@ -31,6 +31,7 @@ public class ChessEntity extends Entity implements CustomEntity {
     public ChessEntity(FullChunk chunk, CompoundTag nbt) {
         super(chunk, nbt);
         setScale(0.2f);
+        this.saveWithChunk = false;
         type = nbt.getInt("chess_type");
 
     }
@@ -74,6 +75,10 @@ public class ChessEntity extends Entity implements CustomEntity {
      * 选中当前棋子
      * */
     public void setChose(Player chosePlayer){
+        if(panEntity == null){
+            this.close();
+            return;
+        }
         if(isDie){
             return;
         }
@@ -153,6 +158,10 @@ public class ChessEntity extends Entity implements CustomEntity {
         if (this.closed) {
             return false;
         } else {
+            if (panEntity == null) {
+                this.close();
+                return false;
+            }
             if(hasChose){
                 if(chosePlayer != null && chosePlayer.isAlive() && chosePlayer.distance(panEntity) < 5){
                     // 增强版视角跟随算法
